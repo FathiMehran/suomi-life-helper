@@ -1,6 +1,8 @@
 # app/schemas.py
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
+
 
 # User
 class UserCreate(BaseModel):
@@ -28,6 +30,8 @@ class TaskCreate(TaskBase):
 class TaskOut(TaskBase):
     id: int
     owner_id: int
+    created_at: datetime
+    updated_at: datetime
 
     class Config:
         orm_mode = True

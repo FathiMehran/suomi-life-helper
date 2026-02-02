@@ -1,7 +1,9 @@
 # app/models.py
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey , DateTime
 from sqlalchemy.orm import relationship
 from app.database import Base
+from datetime import datetime
+
 
 class User(Base):
     __tablename__ = "users"
@@ -13,6 +15,9 @@ class User(Base):
 
     tasks = relationship("Task", back_populates="owner")
 
+    #tasks = relationship("Task", back_populates="owner")
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -22,5 +27,14 @@ class Task(Base):
     status = Column(String, default="not started")  # not started / in progress / done
     owner_id = Column(Integer, ForeignKey("users.id"))
 
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+
     owner = relationship("User", back_populates="tasks")
+
+
+    #owner_id = Column(Integer, ForeignKey("users.id"))
+    #owner = relationship("User")
 
