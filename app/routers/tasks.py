@@ -8,7 +8,10 @@ from app.database import get_db
 
 from app.auth.deps import get_current_user
 from app.models import User
+from sqlalchemy import  desc, asc, or_
 
+from fastapi import Query
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -20,46 +23,99 @@ router = APIRouter()
 def create_task(
     task: schemas.TaskCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)   # 
+    current_user: User = Depends(get_current_user),
 ):
-    db_task = models.Task(**task.dict(), owner_id=current_user.id)
-    db.add(db_task)
+    new_task = models.Task(
+        title=task.title,
+        description=task.description,
+        status=task.status,
+        deadline=task.deadline,   # 👈 این خط حیاتی است
+        owner_id=current_user.id,
+    )
+
+    db.add(new_task)
     db.commit()
-    db.refresh(db_task)
-    return db_task
+    db.refresh(new_task)
+    return new_task
+
+
+# ---------------------------
+# Notification Task
+# ---------------------------
+
+@router.get("/notifications")
+def task_notifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    hours: int = Query(24, ge=1, le=168),
+):
+    now = datetime.utcnow()
+    upcoming = now + timedelta(hours=hours)
+
+    tasks = (
+        db.query(models.Task)
+        .filter(
+            models.Task.owner_id == current_user.id,
+            models.Task.deadline != None,
+            models.Task.deadline <= upcoming,
+            models.Task.status != "done",
+        )
+        .order_by(models.Task.deadline.asc())
+        .all()
+    )
+
+    return tasks
+
 
 # ---------------------------
 # Read all Tasks
 # ---------------------------
 
-@router.get("/", response_model=List[schemas.TaskOut])
+
+@router.get("/", response_model=schemas.PaginatedResponse[schemas.TaskOut])
 def read_tasks(
-    skip: int = 0,
-    limit: int = 100,
-    status: str | None = None,
-    sort_by: str = "created_at",
-    order: str = "desc",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
-    query = db.query(models.Task).filter(
-        models.Task.owner_id == current_user.id
-    )
 
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    sort_by: str = Query("created_at"),   # یا title
+    order: str = Query("desc"),            # asc / desc
+    status: str | None = Query(None),
+    search: str | None = Query(None),
+):
+    query = db.query(models.Task).filter(models.Task.owner_id == current_user.id)
+
+    # فیلتر status
     if status:
         query = query.filter(models.Task.status == status)
 
-    sort_column = getattr(models.Task, sort_by, None)
-    if not sort_column:
-        raise HTTPException(status_code=400, detail="Invalid sort field")
+    # فیلتر search روی title و description
+    if search:
+        query = query.filter(
+            or_(
+                models.Task.title.ilike(f"%{search}%"),
+                models.Task.description.ilike(f"%{search}%")
+            )
+        )
 
-    if order == "desc":
-        query = query.order_by(sort_column.desc())
-    else:
-        query = query.order_by(sort_column.asc())
+    total = query.count()
 
-    tasks = query.offset(skip).limit(limit).all()
-    return tasks
+    # sort ساده
+    if hasattr(models.Task, sort_by):
+        column = getattr(models.Task, sort_by)
+        query = query.order_by(desc(column) if order == "desc" else asc(column))
+
+    tasks = query.offset((page - 1) * page_size).limit(page_size).all()
+
+    return {
+        "items": tasks,
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
+
+
 
 
 
@@ -67,6 +123,8 @@ def read_tasks(
 # Read single Task by ID
 # ---------------------------
 @router.get("/{task_id}", response_model=schemas.TaskOut)
+#@router.get("/", response_model=schemas.TaskOut)
+
 def read_task(
     task_id: int,
     db: Session = Depends(get_db),
@@ -137,4 +195,5 @@ def delete_task(
     db.delete(task)
     db.commit()
     return {"detail": "Task deleted"}
+
 

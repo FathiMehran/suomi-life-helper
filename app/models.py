@@ -4,6 +4,15 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
 
+from sqlalchemy import Enum as SQLEnum
+from app.schemas import TaskStatus
+
+status = Column(
+    SQLEnum(TaskStatus),
+    default=TaskStatus.not_started,
+    nullable=False
+)
+
 
 class User(Base):
     __tablename__ = "users"
@@ -30,7 +39,7 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-
+    deadline = Column(DateTime, nullable=True)   #
 
     owner = relationship("User", back_populates="tasks")
 
