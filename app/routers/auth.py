@@ -1,5 +1,6 @@
 # app/routers/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
 from app import models, schemas
@@ -32,19 +33,52 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 # ---------------------------
-# Login
+# Login (Swagger UI + Frontend)
 # ---------------------------
 @router.post("/login")
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
-):
-    db_user = db.query(User).filter(User.username == form_data.username).first()
-    if not db_user or not verify_password(form_data.password, db_user.hashed_password):
+async def login(request: Request, db: Session = Depends(get_db)):
+    """
+    Login endpoint that works both for:
+    - Swagger UI Authorize (form data)
+    - Frontend (JSON)
+    """
+    username = None
+    password = None
+
+    # تلاش برای دریافت فرم (Swagger UI)
+    try:
+        form = await request.form()
+        username = form.get("username")
+        password = form.get("password")
+    except:
+        pass
+
+    # اگر فرم نبود، فرض JSON (Frontend)
+    if not username or not password:
+        try:
+            data = await request.json()
+            username = data.get("username")
+            password = data.get("password")
+        except:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid request format"
+            )
+
+    if not username or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username and password required"
+        )
+
+    # بررسی یوزر
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user or not verify_password(password, db_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
         )
 
+    # ایجاد توکن
     access_token = create_access_token(data={"sub": db_user.username})
     return {"access_token": access_token, "token_type": "bearer"}
