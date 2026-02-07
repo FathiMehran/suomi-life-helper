@@ -9,6 +9,23 @@ export default function Tasks({ onLogout }) {
 
   const token = localStorage.getItem("token");
 
+  const [deadline, setDeadline] = useState("");
+
+
+  function getDeadlineColor(deadline) {
+  if (!deadline) return "black";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const d = new Date(deadline);
+  d.setHours(0, 0, 0, 0);
+
+  if (d < today) return "red";        // گذشته
+  if (d.getTime() === today.getTime()) return "orange"; // امروز
+  return "green";                     // آینده
+}
+
   // ---------------------------
   // Fetch tasks
   // ---------------------------
@@ -44,6 +61,11 @@ export default function Tasks({ onLogout }) {
     e.preventDefault();
     setError(null);
 
+    const deadlineISO = deadline
+    ? new Date(deadline + "T00:00:00").toISOString()
+    : null;
+
+
     try {
       const res = await fetch("http://127.0.0.1:8000/tasks/", {
         method: "POST",
@@ -51,7 +73,16 @@ export default function Tasks({ onLogout }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ title, description, status }),
+        //body: JSON.stringify({ title, description, status }),
+
+        body: JSON.stringify({
+          title,
+          description,
+          status,
+          deadline: deadlineISO, // || null
+        }),
+
+
       });
 
       if (!res.ok) throw new Error("Failed to create task");
@@ -65,6 +96,7 @@ export default function Tasks({ onLogout }) {
       console.error(err);
       setError("Failed to create task");
     }
+    setDeadline("");
   };
 
   return (
@@ -90,6 +122,15 @@ export default function Tasks({ onLogout }) {
           onChange={(e) => setDescription(e.target.value)}
         />
         <br />
+        <input
+          type="date"
+          value={deadline}
+          onChange={(e) => setDeadline(e.target.value)}
+          style={{ marginBottom: "1rem" }}
+        />
+        <br />
+
+        
 
         <select value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="not started">Not Started</option>
@@ -106,14 +147,28 @@ export default function Tasks({ onLogout }) {
       <ul>
         {tasks.length === 0 ? (
           <li>No tasks found</li>
-        ) : (
-          tasks.map((task) => (
-            <li key={task.id}>
-              <strong>{task.title}</strong> – {task.description} ({task.status})
-            </li>
-          ))
-        )}
+      ) : (
+        tasks.map(task => (
+          <li key={task.id}
+  style={{
+    borderLeft: `5px solid ${getDeadlineColor(task.deadline)}`,
+    paddingLeft: "0.5rem",
+    marginBottom: "1rem"
+  }}>
+            <strong>{task.title}</strong>
+            <div>{task.description}</div>
+            <div>Status: {task.status}</div>
+            <div>
+              Deadline:{" "}
+              {task.deadline
+                ? new Date(task.deadline).toLocaleDateString()
+                : "—"}
+            </div>
+          </li>
+        ))
+      )}
       </ul>
+
     </div>
   );
 }
